@@ -1,0 +1,88 @@
+# Authentication for OAuth2 users with Keycloak
+# Dovecot 2.4 OAuth2 Configuration for Keycloak at IPB
+#
+# Using tokeninfo URL format with embedded client credentials
+
+##
+## Global OAuth2 Settings - REQUIRED at top level
+## This is old way but still works
+#oauth2_introspection_url = https://client_id:client_secret@your_keycloak_server/realms/realm_name/protocol/openid-connect/token/introspect
+#oauth2_introspection_mode = post
+#oauth2_username_attribute = email
+#oauth2_active_attribute = active
+#oauth2_active_value = true
+#oauth2_force_introspection = yes
+#oauth2_issuers = https://your_keycloak_server/realms/realm_name
+#oauth2_token_expire_grace = 1min
+
+
+# New way also works
+oauth2 {
+introspection_url = https://client_id:client_secret@your_keycloak_server/realms/realm_name/protocol/openid-connect/token/introspect
+introspection_mode = post
+username_attribute = email
+active_attribute = active
+active_value = true
+force_introspection = yes
+issuers = https://your_keycloak_server/realms/realm_name
+token_expire_grace = 1min
+}
+##
+## PassDB OAuth2 (REQUIRED)
+## This configures the password database to use OAuth2 authentication
+##
+passdb oauth2 {
+    ##
+    ## Mechanism Filter (REQUIRED)
+    ## Only use OAuth2 for these authentication mechanisms
+    ## This prevents OAuth2 from being tried for password-based auth
+    ##
+    ## NOTE: XOAUTH2 only - OAUTHBEARER has authzid issues with SMTP
+    mechanisms_filter = xoauth2
+}
+
+##
+## UserDB Configuration
+## IMPORTANT: OAuth2 only handles authentication!
+## You still need userdb to provide user info (home, uid, gid, quota, etc.)
+##
+## Continue using your existing LDAP userdb from auth-ldap.conf.ext:
+## - It provides home directory, uid, gid, quota
+## - Works for both OAuth2 and password-authenticated users
+##
+## Your existing LDAP userdb should have:
+## userdb ldap {
+##   ldap_filter = (&(objectClass=qmailUser)(|(uid=%{user})(mail=%{user}))(!(memberOf=cn=noemail,ou=services,ou=groups,dc=ipb,dc=pt)))
+##   fields {
+##     uid = vmail
+##     gid = vmail
+##     user = %{ldap:uid}
+##     home = %{ldap:mailMessageStore}
+##     quota_storage_size = %{ldap:mailQuotaSize}B
+##   }
+## }
+##
+
+##
+## INSTALLATION INSTRUCTIONS
+##
+## 1. Copy this file to Dovecot config directory:
+##    sudo cp auth-oauth2.conf.ext.READY /etc/dovecot/conf.d/auth-oauth2.conf.ext
+##
+## 2. Edit /etc/dovecot/conf.d/10-auth.conf and add:
+##    auth_mechanisms = plain login oauthbearer xoauth2
+##    !include auth-oauth2.conf.ext
+##
+## 3. Verify configuration:
+##    sudo doveconf -n | grep -i oauth2
+##    sudo doveconf auth_mechanisms
+##
+## 4. Restart Dovecot:
+##    sudo systemctl restart dovecot
+##    sudo systemctl status dovecot
+##
+## 5. Monitor logs for any errors:
+##    sudo journalctl -u dovecot -f
+##
+## 6. Test with email client supporting OAuth2 (Round Cube)
+##
