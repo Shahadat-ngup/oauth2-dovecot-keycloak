@@ -12,23 +12,7 @@ Successfully configured OAuth2 authentication for a complete mail server stack u
 
 ## Authentication Flow
 
-```
-User (Browser) → Roundcube → Keycloak (OAuth2 + MFA)
-                     ↓
-              OAuth2 Token
-                     ↓
-         ┌───────────┴───────────┐
-         ↓                       ↓
-    IMAP (Dovecot)          SMTP (Postfix)
-         ↓                       ↓
-    XOAUTH2 Auth            XOAUTH2 Auth
-         ↓                       ↓
-    Token Introspection ←───────┘
-         ↓
-    Keycloak Validation
-         ↓
-    LDAP UserDB (home, uid, gid, quota)
-```
+![flowofwebmail.png](/flowofwebmail.png)
 
 ## Working Configuration
 
