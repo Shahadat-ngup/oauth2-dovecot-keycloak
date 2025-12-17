@@ -8,6 +8,7 @@ Successfully configured OAuth2 authentication for a complete mail server stack u
 - **Postfix**: 3.7.11-0+deb12u1
 - **Keycloak**: 26.4.7
 - **Roundcube**: 1.7-beta2
+- **OpenLdap**: slapd 2.5.13+dfsg-5
 
 ## Authentication Flow
 
@@ -50,13 +51,13 @@ auth_mechanisms = plain login xoauth2
 #### /etc/dovecot/conf.d/auth-oauth2.conf.ext
 ```conf
 # Global OAuth2 Settings
-oauth2_introspection_url = https://dovecot:CLIENT_SECRET@id.ipb.pt/realms/ccom/protocol/openid-connect/token/introspect
+oauth2_introspection_url = https://dovecot:CLIENT_SECRET@your_keycloak_server/realms/ccom/protocol/openid-connect/token/introspect
 oauth2_introspection_mode = post
 oauth2_username_attribute = email
 oauth2_active_attribute = active
 oauth2_active_value = true
 oauth2_force_introspection = yes
-oauth2_issuers = https://id.ipb.pt/realms/ccom
+oauth2_issuers = https://your_keycloak_server/realms/ccom
 oauth2_token_expire_grace = 1min
 
 # PassDB OAuth2
@@ -99,44 +100,40 @@ submission inet n       -       y       -       -       smtpd
 // OAuth2 Configuration
 $config['oauth_provider'] = 'generic';
 $config['oauth_provider_name'] = 'IPB Keycloak';
-$config['oauth_client_id'] = "webmail";
+$config['oauth_client_id'] = "your_client_id";
 $config['oauth_client_secret'] = "YOUR_CLIENT_SECRET";
-$config['oauth_auth_uri'] = 'https://id.ipb.pt/realms/ccom/protocol/openid-connect/auth';
-$config['oauth_token_uri'] = 'https://id.ipb.pt/realms/ccom/protocol/openid-connect/token';
-$config['oauth_identity_uri'] = 'https://id.ipb.pt/realms/ccom/protocol/openid-connect/userinfo';
+$config['oauth_auth_uri'] = 'https://your_keycloak_server/realms/ccom/protocol/openid-connect/auth';
+$config['oauth_token_uri'] = 'https://your_keycloak_server/realms/ccom/protocol/openid-connect/token';
+$config['oauth_identity_uri'] = 'https://your_keycloak_server/realms/ccom/protocol/openid-connect/userinfo';
 $config['oauth_scope'] = "openid email profile";
 
 // CRITICAL: Tell Roundcube to use 'email' field as username
 $config['oauth_identity_fields'] = ['email'];
 
 // REQUIRED: Fixed IMAP and SMTP hosts for OAuth2
-$config['default_host'] = 'ssl://mail.ccom.ipb.pt:993';
-$config['smtp_server'] = 'tls://mail.ccom.ipb.pt:587';
-
-// REQUIRED: Use OAuth2 credentials for SMTP
-$config['smtp_user'] = '%u';  // Use IMAP username
-$config['smtp_pass'] = '%p';  // Use IMAP password (OAuth2 token)
+$config['smtp_server'] = 'tls://mail.ccom.ipb.pt';
 
 // RECOMMENDED: Cache tokens in database
 $config['oauth_cache'] = 'db';
 ```
-
-**Critical Settings:**
-- `oauth_identity_fields = ['email']`: Mandatory for Roundcube to extract username from OAuth2 token
-- `default_host` and `smtp_server`: Must be set to fixed values (required for OAuth2)
-- `smtp_user = '%u'` and `smtp_pass = '%p'`: Use same OAuth2 token for both IMAP and SMTP
 
 ### Keycloak Configuration
 
 1. **Dovecot Client** (for token introspection):
    - Client ID: `dovecot`
    - Service Account Enabled: `ON`
-   - Service Account Roles: `realm-management` → `view-users`, `view-clients`
+   - Standard Flow: `ON`
+   - Standard Token Exchange: `ON`
+   - OAuth 2.0 Device Authorization Grant: `ON`
+
 
 2. **Webmail Client** (for Roundcube):
-   - Client ID: `webmail`
-   - Valid Redirect URIs: `https://webmail-qa.ipb.pt/index.php/login/oauth`
-   - Web Origins: `https://webmail-qa.ipb.pt`
+   - Client ID: `roundcube_id`
+   - Valid Redirect URIs: `https://your_roundcube_server/index.php/login/oauth`
+   - Web Origins: `https://your_roundcube_server`
+   - Standard Flow: `ON`
+   - Standard Token Exchange: `ON`
+   - OAuth 2.0 Device Authorization Grant: `ON`
 
 ## OAUTHBEARER vs XOAUTH2 Issue
 
@@ -150,10 +147,10 @@ Dec 16 15:05:32 auth(?,193.136.195.164,sasl:oauthbearer): Info: sasl(oauthbearer
 
 **Root Cause:** Roundcube sends OAUTHBEARER requests with an authorization identity (authzid):
 ```
-n,a=hossain@ipb.pt\x01auth=Bearer eyJhbGci...
+n,a=hosain@ipb.pt\x01auth=Bearer eyJhbGci...
 ```
 
-The `a=hossain@ipb.pt` field is the authzid. While Dovecot IMAP accepts this, **Dovecot SMTP via Postfix SASL rejects it**.
+The `a=hosain@ipb.pt` field is the authzid. While Dovecot IMAP accepts this, **Dovecot SMTP via Postfix SASL rejects it**.
 
 ### Working Solution: XOAUTH2
 
@@ -167,11 +164,11 @@ Switching to `XOAUTH2` mechanism resolved the issue:
 
 ### IMAP Login (Working)
 ```log
-Dec 16 15:19:23 auth(hossain,193.136.195.164,sasl:xoauth2): Debug: oauth2: Introspection succeeded
-Dec 16 15:19:23 auth(hossain,193.136.195.164,sasl:xoauth2): Debug: oauth2 active_attribute check succeeded
-Dec 16 15:19:23 auth(hossain,193.136.195.164,sasl:xoauth2): Debug: ldap: Finished userdb lookup
-Dec 16 15:19:23 auth: Debug: master userdb out: USER hossain uid=2000 gid=996 home=/home/vmail/ipb/hossain/Maildir/ quota_storage_size=104857600B auth_mech=XOAUTH2
-Dec 16 15:19:23 imap-login: Info: Logged in: user=<hossain>, method=XOAUTH2, rip=193.136.195.164, lip=193.136.194.121, TLS, session=<E8uwQBNG4pTBiMOk>
+Dec 16 15:19:23 auth(hosain,193.136.195.194,sasl:xoauth2): Debug: oauth2: Introspection succeeded
+Dec 16 15:19:23 auth(hossain,193.136.195.194,sasl:xoauth2): Debug: oauth2 active_attribute check succeeded
+Dec 16 15:19:23 auth(hossain,193.136.195.194,sasl:xoauth2): Debug: ldap: Finished userdb lookup
+Dec 16 15:19:23 auth: Debug: master userdb out: USER hosain uid=2000 gid=996 home=/home/vmail/ipb/hosain/Maildir/ quota_storage_size=104857600B auth_mech=XOAUTH2
+Dec 16 15:19:23 imap-login: Info: Logged in: user=<hosain>, method=XOAUTH2, rip=193.136.195.164, lip=193.136.194.121, TLS, session=<E8uwQBNG4pTBiMOk>
 ```
 
 ### SMTP Authentication (Working)
@@ -179,40 +176,10 @@ Dec 16 15:19:23 imap-login: Info: Logged in: user=<hossain>, method=XOAUTH2, rip
 Dec 16 15:19:37 auth: Debug: conn unix:auth (pid=106274,uid=102): client in: AUTH 1 XOAUTH2 service=smtp
 Dec 16 15:19:37 auth(?,193.136.195.164,sasl:xoauth2): Debug: oauth2: Introspection succeeded
 Dec 16 15:19:37 auth(?,193.136.195.164,sasl:xoauth2): Debug: oauth2 active_attribute check succeeded
-Dec 16 15:19:37 auth: Debug: conn unix:auth: client passdb out: OK 1 user=hossain@ipb.pt
+Dec 16 15:19:37 auth: Debug: conn unix:auth: client passdb out: OK 1 user=hosain@ipb.pt
 ```
 
 **Note:** No FAIL message indicates successful authentication. The email is then sent successfully through Postfix submission service.
-
-## Key Learnings
-
-1. **Dovecot 2.4 Bug**: Client credentials not sent in introspection requests → Fixed by embedding credentials in URL
-2. **Username Mapping**: Use `email` field instead of `preferred_username` to match user login format
-3. **OAUTHBEARER Issues**: Has authzid field that causes SMTP rejection → Use XOAUTH2 instead
-4. **Roundcube Requirements**: Must set `oauth_identity_fields`, fixed hosts, and SMTP credential placeholders
-5. **Dual Authentication**: LDAP userdb works with both OAuth2 and password-based authentication
-
-## Testing
-
-### Test IMAP OAuth2
-```bash
-# Should succeed with OAuth2 token
-telnet mail.ccom.ipb.pt 993
-# Use XOAUTH2 authentication
-```
-
-### Test SMTP OAuth2
-```bash
-# Should succeed with same OAuth2 token
-telnet mail.ccom.ipb.pt 587
-# Use XOAUTH2 authentication
-```
-
-### Monitor Logs
-```bash
-tail -f /var/log/mail_logs/dovecot_info.log
-journalctl -u postfix -f
-```
 
 ## Conclusion
 
