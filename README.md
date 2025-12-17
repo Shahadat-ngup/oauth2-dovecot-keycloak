@@ -12,7 +12,7 @@ Successfully configured OAuth2 authentication for a complete mail server stack u
 
 ## Authentication Flow
 
-![flowofwebmail.png](flowofwebmail.png)
+![FlowOfWebmail.png](FlowOfWebmail.png)
 
 ## Working Configuration
 
